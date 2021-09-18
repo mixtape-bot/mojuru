@@ -2,7 +2,7 @@ import { RateLimiter } from "./rateLimiter";
 
 async function main() {
     let consumptions = 0;
-    const ratelimiter = new RateLimiter(1, 5000);
+    const ratelimiter = new RateLimiter("test", 1, 5000);
 
     async function consume() {
         let consumption = consumptions++;

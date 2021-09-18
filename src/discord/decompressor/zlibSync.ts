@@ -18,7 +18,6 @@ export class ZlibSync extends Decompressor {
             this[_inflate].push(buf, zlibSync.Z_SYNC_FLUSH);
             if (this[_inflate].err) {
                 const msg = `${this[_inflate].err}: ${this[_inflate].msg}`;
-                console.log(msg)
                 this.emit("error", new Error(msg));
                 return;
             }

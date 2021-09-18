@@ -1,3 +1,4 @@
+import "reflect-metadata";
 import { Amqp, AmqpOptions, AmqpResponseOptions } from "@spectacles/brokers";
 import { encode, decode } from "@msgpack/msgpack";
 
@@ -27,7 +28,6 @@ export interface Subscription {
     propertyKey: PropertyKey;
     event: string;
 }
-
 
 export class Group {
     /**

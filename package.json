@@ -10,6 +10,8 @@
         "dev": "ts-node src/index.ts"
     },
     "dependencies": {
+        "@dimensional-fun/common": "^1.0.3",
+        "@discordjs/rest": "^0.1.0-canary.0",
         "@msgpack/msgpack": "^2.7.1",
         "@spectacles/brokers": "^0.8.4",
         "caterpillar": "^6.8.0",

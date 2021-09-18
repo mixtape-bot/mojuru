@@ -1,8 +1,8 @@
-import type { Shard } from "./shard";
-import { _shard_log } from "./keys";
+import { createLogger } from "../tools/createLogger";
 
 const _tokens: unique symbol = Symbol.for("Ratelimiter#tokens");
 const _lock: unique symbol = Symbol.for("Ratelimiter#lock");
+const _logger = createLogger();
 
 export class RateLimiter {
     private static readonly DEFAULT_TOKENS = 120;
@@ -12,9 +12,9 @@ export class RateLimiter {
     private [_lock]?: Promise<void>;
 
     constructor(
-        readonly shard: Shard,
+        readonly id: string,
         readonly defaultTokens: number = RateLimiter.DEFAULT_TOKENS,
-        readonly ratelimitDuration: number = RateLimiter.DEFAULT_EXPIRATION
+        readonly ratelimitDuration: number = RateLimiter.DEFAULT_EXPIRATION,
     ) {
         this[_tokens] = +defaultTokens;
     }
@@ -25,20 +25,30 @@ export class RateLimiter {
 
     async consume(): Promise<void> {
         await this[_lock];
-        await this._check()
+        await this._check();
         this[_tokens]--
     }
 
     private async _check() {
+        /* check if we're out of tokens, if so lock token consumption. */
         if (this[_tokens] <= 0) {
-            this.shard[_shard_log]("warn", "ratelimter: ran out of tokens, waiting", this.ratelimitDuration, "milliseconds!");1
+            _logger.warn(`(${this.id})`, "rate-limiter: ran out of tokens, waiting", this.ratelimitDuration, "milliseconds!");
             this[_lock] = new Promise(res => setTimeout(this._free.bind(this, res), this.ratelimitDuration));
             await this[_lock];
         }
+
+        /* as this method is only called when a token is being consumed check if we haven't consumed any tokens, if so queue a reset. */
+        if (this[_tokens] === this.defaultTokens) {
+            setTimeout(this._reset.bind(this), this.ratelimitDuration);
+        }
+    }
+
+    private _reset() {
+        this[_tokens] = this.defaultTokens;
     }
 
     private _free(res: () => void) {
-        this[_tokens] = this.defaultTokens;
+        this._reset();
         delete this[_lock];
         res();
     }

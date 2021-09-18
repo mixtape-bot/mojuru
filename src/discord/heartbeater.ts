@@ -3,9 +3,9 @@ import { GatewayOpcodes } from "discord-api-types/v9";
 
 import type { Shard } from "./shard";
 
-const _last: unique symbol = Symbol.for("Heartbeater#last")
-const _latency: unique symbol = Symbol.for("Heartbeater#latency")
-const _delay: unique symbol = Symbol.for("Heartbeater#delay")
+const _last:     unique symbol = Symbol.for("Heartbeater#last")
+const _latency:  unique symbol = Symbol.for("Heartbeater#latency")
+const _delay:    unique symbol = Symbol.for("Heartbeater#delay")
 const _interval: unique symbol = Symbol.for("Heartbeater#interval")
 
 export class Heartbeater {

@@ -10,24 +10,26 @@ import type { Decompressor, Decompressors } from "./decompressor";
 import { RateLimiter } from "./rateLimiter";
 import { Heartbeater } from "./heartbeater";
 import { Session } from "./session";
+import { TypedEmitter } from "tiny-typed-emitter";
+import { sleep } from "../tools/sleep";
 
 const _logger = createLogger()
 
-const _ws: unique symbol = Symbol.for("Shard#ws")
+const _ws:           unique symbol = Symbol.for("Shard#ws")
+const _state:        unique symbol = Symbol.for("Shard#state")
+const _queue:        unique symbol = Symbol.for("Shard#queue")
+
 const _decompressor: unique symbol = Symbol.for("Shard#decompressor")
-const _state: unique symbol = Symbol.for("Shard#state")
-const _queue: unique symbol = Symbol.for("Shard#queue")
+const _rateLimiter:  unique symbol = Symbol.for("Shard#rateLimiter")
+const _heartBeater:  unique symbol = Symbol.for("Shard#heartBeater")
+const _session:      unique symbol = Symbol.for("Shard#session")
 
-const _rateLimiter: unique symbol = Symbol.for("Shard#rateLimiter")
-const _heartBeater: unique symbol = Symbol.for("Shard#heartBeater")
-const _session: unique symbol = Symbol.for("Shard#session")
+enum ShardState { Ready, Disconnected, Idle, WaitingToIdentify }
 
-enum ShardState { Ready, Disconnected, Idle }
-
-export class Shard {
-    [_decompressor]?: Decompressor;
+export class Shard extends TypedEmitter<{ state: (newState: ShardState, oldState: ShardState) => void }> {
     [_ws]!: WebSocket;
 
+    [_decompressor]?: Decompressor;
     [_rateLimiter]: RateLimiter;
     [_heartBeater]: Heartbeater;
     [_session]: Session;
@@ -38,11 +40,13 @@ export class Shard {
     [_shard_close_sequence]: number = -1;
 
     constructor(readonly cluster: Cluster, readonly settings: ShardSettings) {
+        super()
+
         if (settings.decompressor) {
             this._setupDecompressor(settings.decompressor);
         }
 
-        this[_rateLimiter] = new RateLimiter(this);
+        this[_rateLimiter] = new RateLimiter(this._logPrefix);
         this[_heartBeater] = new Heartbeater(this);
         this[_session] = new Session(this);
 
@@ -69,8 +73,17 @@ export class Shard {
         return `shard[${id}, ${total}] -`;
     }
 
+    private set state(state: ShardState) {
+        this.emit("state", state, this.state);
+        this[_state] = state;
+    }
+
     get state(): ShardState {
         return this[_state];
+    }
+
+    get latency(): number {
+        return this[_heartBeater].latency;
     }
 
     get connected(): boolean {
@@ -99,7 +112,31 @@ export class Shard {
         this[_ws].send(json);
     }
 
+    async awaitState(state: ShardState, timeout: number): Promise<void> {
+        return new Promise(async (res, rej) => {
+            const listener = (newState: ShardState) => {
+                if (newState == state) {
+                    res();
+                    this.removeListener("state", listener);
+                }
+            }
+
+            this.on("state", listener.bind(this));
+            await sleep(timeout)
+            rej("timed out");
+        });
+    }
+
+    async queueIdentify() {
+        const rateLimiter = await this.cluster.queue.getRateLimiter(this.settings.id[0]);
+        rateLimiter?.consume(async () => {
+            this[_session].identify()
+            await this.awaitState(ShardState.Ready, 5000);
+        });
+    }
+
     private _onopen() {
+        this[_queue].forEach(this.send.bind(this));
         this[_shard_log]("info", "connected to discord gateway.");
     }
 
@@ -109,7 +146,7 @@ export class Shard {
             : this._onpacket(typeof data === "string" ? data : normalize(data));
     }
 
-    private _onpacket(packet: string | Buffer) {
+    private async _onpacket(packet: string | Buffer) {
         let payload: GatewayReceivePayload;
         try {
             const json = packet.toString()
@@ -120,11 +157,11 @@ export class Shard {
             return
         }
 
-        this._onpayload(payload);
+        await this._onpayload(payload);
     }
 
-    private _onpayload(payload: GatewayReceivePayload) {
-        if (payload.s != null) {
+    private async _onpayload(payload: GatewayReceivePayload) {
+        if (payload.s !== null) {
             const _current = this[_shard_sequence]
             if (_current !== -1 && payload.s > _current + 1) {
                 this[_shard_log]("debug", `nonconsecutive sequence, ${_current} => ${payload.s}`);
@@ -137,7 +174,7 @@ export class Shard {
             case GatewayOpcodes.Hello:
                 this[_shard_log]("debug", "received HELLO");
                 this[_heartBeater].start(payload.d.heartbeat_interval);
-                this[_session].identify();
+                await this.queueIdentify();
                 break;
             case GatewayOpcodes.Heartbeat:
                 this[_heartBeater].heartbeat("request");
@@ -155,18 +192,18 @@ export class Shard {
         switch (payload.t) {
             case GatewayDispatchEvents.Ready:
                 this[_session].ready(payload.d.session_id, payload.d.user);
-                this[_state] = ShardState.Ready;
+                this.state = ShardState.Ready;
                 this[_heartBeater][_heartbeater_acked] = true;
                 this[_heartBeater].heartbeat("ready");
                 break
             case GatewayDispatchEvents.Resumed:
-                this[_state] = ShardState.Ready;
+                this.state = ShardState.Ready;
                 this[_heartBeater][_heartbeater_acked] = true;
                 this[_heartBeater].heartbeat("resumed");
                 break
         }
 
-        this.cluster.handleDispatch(this.settings.id[0], payload);
+        this.cluster.mojuru.publishEvent(this.settings.id[0], payload);
     }
 
     private _setupDecompressor(decompressor: Decompressors) {
