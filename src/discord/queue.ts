@@ -14,6 +14,8 @@ const _rate_limiter_queue:  unique symbol = Symbol.for("RateLimiter#queue");
 const _rate_limiter_last:   unique symbol = Symbol.for("RateLimiter#last");
 const _rate_limiter_locked: unique symbol = Symbol.for("RateLimiter#locked");
 
+// TODO: handle session start limit
+
 class RateLimiter {
     private [_rate_limiter_queue]: Token[] = [];
     private [_rate_limiter_locked] = false;

@@ -9,8 +9,13 @@ async function main() {
         ack();
     });
 
+    broker.on("GUILD_CREATE", (event: ShardIdentifiedMessage, { ack }) => {
+        console.log(JSON.parse(event.payload.toString()));
+        ack();
+    });
+
     await broker.connect("localhost")
-    broker.subscribe(["MESSAGE_CREATE"]);
+    broker.subscribe(["MESSAGE_CREATE", "GUILD_CREATE"]);
     broker.publish("command", {
         shard_id: 0,
         payload: Buffer.from(JSON.stringify({

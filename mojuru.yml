@@ -1,0 +1,16 @@
+discord:
+    token: ""
+    gatewayVersion: "9"
+cluster:
+    events: [ GUILD_CREATE, MESSAGE_CREATE ]
+    shard:
+        intents: [ "GuildMessages" ]
+        decompressor: zlib-sync
+        url: wss://gateway.discord.gg/
+    spawning:
+        type: "auto"
+amqp:
+    host: localhost
+    group: mojuru
+    subgroup: gateway
+    commandEvent: command

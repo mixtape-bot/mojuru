@@ -2,14 +2,14 @@ import { Collection } from "@dimensional-fun/common";
 import { Shard } from "./shard";
 import { Queue } from "./queue";
 import { createShards, getClusterShards, range } from "../tools/shards";
-import { GatewayIntentBits } from "discord-api-types/v9";
 import type { Mojuru } from "../Mojuru";
+import config from "../tools/config";
 
 export class Cluster {
     readonly shards: Collection<number, Shard>;
     readonly queue: Queue;
 
-    constructor(readonly mojuru: Mojuru, readonly token: string) {
+    constructor(readonly mojuru: Mojuru) {
         this.shards = new Collection<number, Shard>();
         this.queue = new Queue(this);
     }
@@ -47,20 +47,23 @@ export class Cluster {
 
         for (const id of shards) {
             const shard = new Shard(this, {
-                id: [ id, totalShards ],
-                token: this.token,
+                version: config.discord.gatewayVersion,
                 url: "wss://gateway.discord.gg/",
-                version: 9,
-                intents: [ GatewayIntentBits.GuildMessages ],
-                decompressor: "zlib-sync"
+                intents: [],
+                ...config.cluster.shard,
+                id: [ id, totalShards ],
+                token: config.discord.token,
             });
 
             shard.connect();
-            console.log(id);
             this.shards.set(id, shard);
         }
 
         return this;
+    }
+
+    async destroy() {
+        for (const [, shard] of this.shards) await shard.destroy(false);
     }
 }
 

@@ -36,15 +36,18 @@ export function createLogger(): Logger {
     return _logger;
 }
 
-Reflect.defineProperty(Logger.prototype, "trace", {
-    value(this: Logger, ...args: any) {
-        return this.write([ "trace", ...args ]);
-    }
+["trace", "emerg"].forEach(level => {
+    Reflect.defineProperty(Logger.prototype, level, {
+        value(this: Logger, ...args: any) {
+            return this.write([ level, ...args ]);
+        }
+    });
 })
 
 declare module "caterpillar/compiled-types/logger" {
     interface Logger {
         trace(...args: any[]): void;
+        emerg(...args: any[]): void;
     }
 }
 

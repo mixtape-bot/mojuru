@@ -55,7 +55,7 @@ export class Heartbeater {
         if (!this[_heartbeater_acked]) {
             this.shard[_shard_log]("warn", `heartbeat(${reason}):`, "last heartbeat was not acked,", `ignoring=${ignoreNonAcked}`);
             if (!ignoreNonAcked) {
-                // TODO: destroy the shard.
+                await this.shard.destroy(true, 1012);
                 return;
             }
         }

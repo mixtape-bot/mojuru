@@ -1,27 +1,29 @@
-import { group, Group, subscription } from "./tools/amqp";
 import { Cluster } from "./discord/cluster";
 import { REST } from "@discordjs/rest";
-import type { AmqpResponseOptions } from "@spectacles/brokers";
+import type { Amqp, AmqpResponseOptions } from "@spectacles/brokers";
 import { createLogger } from "./tools/createLogger";
 import type { GatewaySendPayload, GatewayDispatchPayload } from "discord-api-types";
 import type { ShardIdentifiedMessage } from "./tools/events";
+import config from "./tools/config";
+import { createAmqpBroker } from "./tools/amqp";
 
 const _logger = createLogger();
 
-@group("mojuru", "gateway")
-export class Mojuru extends Group {
+export class Mojuru {
+    readonly broker: Amqp;
     readonly cluster: Cluster;
     readonly rest: REST
 
-    constructor(token: string) {
-        super();
+    constructor() {
+        this.cluster = new Cluster(this);
+        this.rest = new REST({ version: `${config.discord.gatewayVersion}` });
+        this.rest.setToken(config.discord.token);
 
-        this.cluster = new Cluster(this, token);
-        this.rest = new REST({ version: "9" });
-        this.rest.setToken(token);
+        /* setup the broker. */
+        this.broker = createAmqpBroker(config.amqp.group, config.amqp.subgroup);
+        this.broker.on("command", this.onCommand.bind(this));
     }
 
-    @subscription("command")
     async onCommand(message: ShardIdentifiedMessage, options: AmqpResponseOptions) {
         const shard = this.cluster.shards.get(message.shard_id);
         if (!shard) {
@@ -36,6 +38,10 @@ export class Mojuru extends Group {
     }
 
     publishEvent(shardId: number, payload: GatewayDispatchPayload) {
+        if (!config.cluster.events.includes(payload.t)) {
+            return;
+        }
+
         const bytes = Buffer.from(JSON.stringify(payload));
         this.broker.publish(payload.t, {
             shard_id: shardId,
