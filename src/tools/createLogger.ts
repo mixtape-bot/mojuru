@@ -1,4 +1,4 @@
-import { Human, Logger } from "caterpillar";
+import { Filter, Human, Logger } from "caterpillar";
 import type * as ansi from "@bevry/ansi";
 
 const levels = {
@@ -10,11 +10,6 @@ const levels = {
     notice: 5,
     info: 6,
     debug: 7,
-    emerg: 0,
-    crit: 2,
-    err: 3,
-    warn: 4,
-    note: 5,
     trace: 8,
 }
 
@@ -32,7 +27,10 @@ const colors: Record<string, ansi.ANSIApplier> = {
 
 export function createLogger(): Logger {
     const _logger = new Logger({ /*defaultLevel: 8, lineLevel: 8,*/ levels });
-    _logger.pipe(new Human({ colors })).pipe(process.stdout)
+    _logger
+        .pipe(new Filter({ filterLevel: 8 }))
+        .pipe(new Human({ colors }))
+        .pipe(process.stdout)
     return _logger;
 }
 
@@ -42,7 +40,7 @@ export function createLogger(): Logger {
             return this.write([ level, ...args ]);
         }
     });
-})
+});
 
 declare module "caterpillar/compiled-types/logger" {
     interface Logger {

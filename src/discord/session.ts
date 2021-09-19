@@ -52,13 +52,15 @@ export class Session {
             this.shard[_shard_log]("warn", "identify: a session id is already present, identifying anyways.");
         }
 
+        const intents = Array.isArray(this.shard.settings.intents)
+            ? this.shard.settings.intents.reduce((a, i) => a | GatewayIntentBits[i], 0)
+            : this.shard.settings.intents ?? 0;
+
         await this.shard.send({
             op: GatewayOpcodes.Identify,
             d: {
                 shard: this.shard.settings.id,
-                intents: Array.isArray(this.shard.settings.intents)
-                    ? this.shard.settings.intents.map(intent => GatewayIntentBits[intent]).reduce((intents, intent) => intents | intent, 0)
-                    : this.shard.settings.intents!,
+                intents,
                 token: this.shard.settings.token,
                 properties: {
                     $os: process.platform,
