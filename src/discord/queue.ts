@@ -18,12 +18,12 @@
 
 import type { Cluster } from "./cluster";
 import type { RESTGetAPIGatewayBotResult, APIGatewaySessionStartLimit } from "discord-api-types/v9";
-import { Collection } from "@dimensional-fun/common";
-import { createArray, getRateLimitKey, MaxConcurrency } from "../tools/shards";
+import { Collection } from "@discordjs/collection";
+import { createArray, getRateLimitKey, MaxConcurrency } from "../tools/discord";
 import { sleep } from "../tools/sleep";
-import { createLogger } from "../tools/createLogger";
+import { getLogger } from "log4js";
 
-const _logger = createLogger();
+const _logger = getLogger("queue");
 const _start_limit:      unique symbol = Symbol.for("Queue#startLimit");
 const _max_concurrency : unique symbol = Symbol.for("Queue#maxConcurrency");
 const _suggested_shards: unique symbol = Symbol.for("Queue#suggested");
@@ -84,8 +84,8 @@ export class Queue {
     constructor(readonly cluster: Cluster) {
     }
 
-    private static _createRateLimiter(bucket: number) {
-        return new RateLimiter(bucket, 5000)
+    private static _createRateLimiter(bucket: number): [ number, RateLimiter ] {
+        return [ bucket, new RateLimiter(bucket, 5000) ]
     }
 
     get startLimit(): APIGatewaySessionStartLimit {
@@ -101,28 +101,36 @@ export class Queue {
     }
 
     async setup() {
-        const maxConcurrency = this[_max_concurrency] ?? (await this.getGatewayBot()).session_start_limit.max_concurrency;
+        let maxConcurrency = this[_max_concurrency];
+        if (!maxConcurrency) {
+            await this.get();
+            maxConcurrency = this[_max_concurrency]!;
+        }
 
         /* create the buckets. */
         const buckets = createArray(maxConcurrency, Queue._createRateLimiter);
-        _logger.debug(`created buckets:`, ...buckets.map(b => b.bucket));
+        _logger.debug(`created buckets:`, ...buckets.map(b => b[0]));
 
         /* now use them ;) */
-        this.buckets = Collection.from(buckets);
+        this.buckets = new Collection(buckets);
     }
 
-    async getRateLimiter(shardId: number) {
+    getRateLimiter(shardId: number) {
         const maxConcurrency = this[_max_concurrency];
         if (!maxConcurrency) throw new Error("Queue#setup has not been called yet.")
         return this.buckets.get(getRateLimitKey(shardId, maxConcurrency));
     }
 
-    async getGatewayBot(): Promise<RESTGetAPIGatewayBotResult> {
-        const resp = await this.cluster.mojuru.rest.get("/gateway/bot") as RESTGetAPIGatewayBotResult;
-        this[_start_limit] = resp.session_start_limit;
-        this[_max_concurrency] = resp.session_start_limit.max_concurrency as MaxConcurrency;
-        this[_suggested_shards] = resp.shards;
+    private async get() {
+        try {
+            const { session_start_limit: limit, shards } = await this.cluster.mojuru.rest.get("/gateway/bot") as RESTGetAPIGatewayBotResult;
+            this[_start_limit] = limit;
+            this[_max_concurrency] = limit.max_concurrency as MaxConcurrency;
+            this[_suggested_shards] = shards;
 
-        return resp;
+            _logger.debug(`received session limit,`, `identifies: ${limit.remaining}/${limit.total}`, "shards:", shards, "max_concurrency:", limit.max_concurrency);
+        } catch (e) {
+            throw new Error("Incorrect Token Passed")
+        }
     }
 }

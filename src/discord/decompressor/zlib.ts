@@ -25,6 +25,8 @@ const _flushing = Symbol.for("Zlib#flushing");
 const _unzip = Symbol.for("Zlib#unzip");
 
 export class Zlib extends Decompressor {
+    readonly type = "zlib-stream";
+
     private [_chunks]: Buffer[] = [];
     private [_incomingChunks]: Buffer[] = [];
     private [_flushing] = false;
@@ -38,6 +40,10 @@ export class Zlib extends Decompressor {
 
         this[_unzip].on("data", c => this[_chunks].push(c));
         this[_unzip].on("error", e => this.emit("error", e));
+    }
+
+    close() {
+        this[_unzip].close();
     }
 
     protected _addBuffer(buf: Buffer) {

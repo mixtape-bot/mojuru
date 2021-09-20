@@ -16,6 +16,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-export function sleep(duration: number, beforeUnlock: () => any = () => {}): Promise<void> {
-    return new Promise(res => setTimeout(async () => { await beforeUnlock(); res() }, duration).ref());
+import type { GatewayReceivePayload, GatewaySendPayload } from "discord-api-types/v9";
+import type { Encoding } from "./index";
+
+export interface Encoder<E = GatewaySendPayload, D = GatewayReceivePayload> {
+    readonly encoding: Encoding;
+
+    encode(payload: E): EncodedData;
+
+    decode(data: EncodedData): D;
 }
+
+export type EncodedData = string | Buffer | Buffer[] | ArrayBuffer;

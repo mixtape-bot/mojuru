@@ -16,16 +16,26 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { Collection } from "@dimensional-fun/common";
-import { Shard } from "./shard";
+import { Collection } from "@discordjs/collection";
+import { Shard, ShardSettings } from "./shard";
 import { Queue } from "./queue";
-import { createShards, getClusterShards, range } from "../tools/shards";
+import { createShards, getClusterShards, range } from "../tools/discord";
 import type { Mojuru } from "../Mojuru";
-import config from "../tools/config";
+import config, { AutoSpawningOptions, ClusteredSpawningOptions, ManualSpawningOptions } from "../tools/config";
+import type { GatewaySendPayload } from "discord-api-types/gateway/v9";
+import { decompressors } from "./decompressor";
+import * as metrics from "../tools/metrics";
+import { getLogger } from "log4js";
+import type { APIUser } from "discord-api-types/v9";
+
+const _logger = getLogger("cluster")
 
 export class Cluster {
     readonly shards: Collection<number, Shard>;
     readonly queue: Queue;
+
+    whoami?: APIUser;
+    totalShards!: number;
 
     constructor(readonly mojuru: Mojuru) {
         this.shards = new Collection<number, Shard>();
@@ -36,23 +46,30 @@ export class Cluster {
         return this.shards.reduce((avg, shard) => avg + shard.latency, 0) / this.shards.size
     }
 
+    async broadcast(message: GatewaySendPayload) {
+        _logger.debug("broadcasting message:", JSON.stringify(message))
+        for (const [, shard] of this.shards) {
+            await shard.send(message);
+        }
+    }
+
     async spawn(options: AutoSpawningOptions | ManualSpawningOptions | ClusteredSpawningOptions) {
         await this.queue.setup();
 
         let shards: number[], totalShards;
         switch (options.type) {
             case "clustered":
-                shards = getClusterShards(options.clusterId, options.shardTotal, options.shardsPerCluster);
-                totalShards = options.shardTotal
+                shards = getClusterShards(options.cluster_id, options.shard_total, options.shards_per_cluster);
+                totalShards = options.shard_total
                 break;
             case "manual":
-                totalShards = options.shardTotal;
+                totalShards = options.shard_total;
                 if (options.shards) {
                     shards = Array.isArray(options.shards)
                         ? options.shards
-                        : range(options.shards.firstId, options.shards.lastId)
+                        : range(options.shards.first_id, options.shards.last_id)
                 } else {
-                    shards = createShards(options.shardTotal);
+                    shards = createShards(options.shard_total);
                 }
                 break;
             case "auto":
@@ -63,13 +80,25 @@ export class Cluster {
                 throw new TypeError(`Unknown spawn type: ${options.type}`);
         }
 
+        const shardOptions = {
+            version: config.discord.gateway_version,
+            url: "wss://gateway.discord.gg/",
+            intents: [],
+            encoding: "json",
+            ...config.cluster.shard_options,
+        } as ShardSettings
+
+        if (shardOptions.decompressor && !decompressors[shardOptions.decompressor]) {
+            delete shardOptions["decompressor"];
+        }
+
+        _logger.debug(`using ${shardOptions.encoding} encoding${shardOptions.decompressor ? `, and ${shardOptions.decompressor}` : " without"} compression`);
         for (const id of shards) {
+            metrics.shardsTotal.inc();
+
             const shard = new Shard(this, {
-                version: config.discord.gatewayVersion,
-                url: "wss://gateway.discord.gg/",
-                intents: [],
-                ...config.cluster.shard,
-                id: [ id, totalShards ],
+                ...shardOptions,
+                shard: [ id, totalShards ],
                 token: config.discord.token,
             });
 
@@ -77,36 +106,14 @@ export class Cluster {
             this.shards.set(id, shard);
         }
 
+        this.totalShards = totalShards;
         return this;
     }
 
     async destroy() {
-        for (const [, shard] of this.shards) await shard.destroy(false);
+        for (const [, shard] of this.shards) {
+            await shard.destroy({ reconnect: false, code: 1_001 });
+        }
     }
 }
 
-export interface SpawningOptions {
-    type?: "auto" | "manual" | "clustered";
-}
-
-export interface AutoSpawningOptions extends SpawningOptions {
-    type?: "auto";
-}
-
-export interface ManualSpawningOptions extends SpawningOptions {
-    type: "manual";
-    shardTotal: number;
-    shards?: number[] | ShardRange;
-}
-
-export interface ClusteredSpawningOptions extends SpawningOptions {
-    type: "clustered";
-    clusterId: number;
-    shardTotal: number;
-    shardsPerCluster: number;
-}
-
-export interface ShardRange {
-    firstId: number;
-    lastId: number;
-}

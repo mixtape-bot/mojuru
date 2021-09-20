@@ -1,8 +1,20 @@
+## folders we dont want on github
 .idea/
-
 dist/
 node_modules/
 
+## envionment variables.
 *.env
+
+## logs
 *.log
+
+## testing files
 *test.ts
+
+## executables.
+mojuru-*
+
+## discord gateway stuff.
+src/gateway/
+litecord/

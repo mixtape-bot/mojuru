@@ -16,10 +16,29 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { APIUser, GatewayOpcodes, GatewayIntentBits } from "discord-api-types/v9";
-import { _session_id, _shard_close_sequence, _shard_log } from "./keys";
+import { GatewayOpcodes } from "discord-api-types/v9";
+import { _redis, _session_id, _shard_close_sequence, _shard_log } from "./keys";
 
 import type { Shard } from "./shard";
+
+// hacky workaround for a possible typescript bug?
+const INTENTS = {
+    Guilds: 1,
+    GuildMembers: 2,
+    GuildBans: 4,
+    GuildEmojisAndStickers: 8,
+    GuildIntegrations: 16,
+    GuildWebhooks: 32,
+    GuildInvites: 64,
+    GuildVoiceStates: 128,
+    GuildPresences: 256,
+    GuildMessages: 512,
+    GuildMessageReactions: 1024,
+    GuildMessageTyping: 2048,
+    DirectMessages: 4096,
+    DirectMessageReactions: 8192,
+    DirectMessageTyping: 16384
+}
 
 export class Session {
     [_session_id]?: string;
@@ -31,9 +50,16 @@ export class Session {
         return !!this[_session_id];
     }
 
-    ready(id: string, user: APIUser) {
+    ready(id: string) {
+        this.shard.cluster.mojuru.redis?.set(_redis.session_id(this.shard.id), id);
         this[_session_id] = id;
-        this.shard[_shard_log]("debug", `identify: identified as ${user.username}#${user.discriminator},`, "session id:", id);
+
+        const user = this.shard.cluster.whoami;
+        if (user) {
+            this.shard[_shard_log]("debug", `[identify] identified as ${user.username}#${user.discriminator},`, "session id:", id);
+        } else {
+            this.shard[_shard_log]("debug", "[identify] identified as an unknown bot?", "session id:", id)
+        }
     }
 
     async identify() {
@@ -44,7 +70,7 @@ export class Session {
 
     async resume() {
         if (!this[_session_id]) {
-            this.shard[_shard_log]("warn", "identify: trying to resume without a session id present?");
+            this.shard[_shard_log]("warn", "[identify] trying to resume without a session id present?");
             return
         }
 
@@ -57,37 +83,38 @@ export class Session {
             }
         });
 
-        this.shard[_shard_log]("debug", "identify: sent resume payload for session", this[_session_id]);
+        this.shard[_shard_log]("debug", "[identify] sent resume payload for session", this[_session_id]);
     }
 
     async new(force: boolean = false) {
         if (this[_session_id]) {
             if (!force) {
-                this.shard[_shard_log]("warn", "identify: we've already identified, maybe use the force option?");
+                this.shard[_shard_log]("warn", "[identify] we've already identified, maybe use the force option?");
                 return;
             }
 
-            this.shard[_shard_log]("warn", "identify: a session id is already present, identifying anyways.");
+            this.shard[_shard_log]("warn", "[identify] a session id is already present, identifying anyways.");
         }
 
         const intents = Array.isArray(this.shard.settings.intents)
-            ? this.shard.settings.intents.reduce((a, i) => a | GatewayIntentBits[i], 0)
+            ? this.shard.settings.intents.reduce((a, i) => a | INTENTS[i], 0)
             : this.shard.settings.intents ?? 0;
 
         await this.shard.send({
             op: GatewayOpcodes.Identify,
             d: {
-                shard: this.shard.settings.id,
+                shard: this.shard.settings.shard,
                 intents,
                 token: this.shard.settings.token,
+                compress: false,
                 properties: {
                     $os: process.platform,
-                    $browser: "Mojuru",
-                    $device: "Mojuru"
+                    $browser: "Mojuru Gateway",
+                    $device: "Mojuru Gateway"
                 }
             }
         });
 
-        this.shard[_shard_log]("debug", "identify: sent shard identify");
+        this.shard[_shard_log]("debug", "[identify] sent shard identify");
     }
 }

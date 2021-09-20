@@ -16,16 +16,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { Zlib } from "./zlib";
+import { FastZlib } from "./fastZlib";
 import { ZlibSync } from "./zlibSync";
+import { Zlib } from "./zlib";
 
 export const decompressors = {
-    "zlib": Zlib,
-    "zlib-sync": ZlibSync
+    "fast-zlib": FastZlib,
+    "zlib-sync": ZlibSync,
+    "zlib": Zlib
 }
 
 export * from "./decompressor";
 export * from "./zlibSync";
-export * from "./zlib";
-
-export type Decompressors = "zlib" | "zlib-sync"
+export * from "./fastZlib";

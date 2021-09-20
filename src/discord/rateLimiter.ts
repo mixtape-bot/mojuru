@@ -16,11 +16,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { createLogger } from "../tools/createLogger";
+import { getLogger } from "log4js";
+import { sleep } from "../tools/sleep";
 
 const _tokens: unique symbol = Symbol.for("Ratelimiter#tokens");
 const _lock: unique symbol = Symbol.for("Ratelimiter#lock");
-const _logger = createLogger();
+const _logger = getLogger("rate-limiter");
 
 export class RateLimiter {
     private static readonly DEFAULT_TOKENS = 120;
@@ -50,14 +51,14 @@ export class RateLimiter {
     private async _check() {
         /* check if we're out of tokens, if so lock token consumption. */
         if (this[_tokens] <= 0) {
-            _logger.warn(`(${this.id})`, "rate-limiter: ran out of tokens, waiting", this.ratelimitDuration, "milliseconds!");
-            this[_lock] = new Promise(res => setTimeout(this._free.bind(this, res), this.ratelimitDuration));
+            _logger.warn(`(${this.id})`, "ran out of tokens, waiting", this.ratelimitDuration, "milliseconds!");
+            this[_lock] = sleep(this.ratelimitDuration, this._unlock.bind(this));
             await this[_lock];
         }
 
         /* as this method is only called when a token is being consumed check if we haven't consumed any tokens, if so queue a reset. */
         if (this[_tokens] === this.defaultTokens) {
-            setTimeout(this._reset.bind(this), this.ratelimitDuration);
+            setTimeout(this._reset.bind(this), this.ratelimitDuration).ref();
         }
     }
 
@@ -65,9 +66,8 @@ export class RateLimiter {
         this[_tokens] = this.defaultTokens;
     }
 
-    private _free(res: () => void) {
+    private _unlock() {
         this._reset();
         delete this[_lock];
-        res();
     }
 }

@@ -19,40 +19,82 @@
 import { Cluster } from "./discord/cluster";
 import { REST } from "@discordjs/rest";
 import type { Amqp, AmqpResponseOptions } from "@spectacles/brokers";
-import { createLogger } from "./tools/createLogger";
 import type { GatewaySendPayload, GatewayDispatchPayload } from "discord-api-types";
-import type { ShardIdentifiedMessage } from "./tools/events";
+import type { GuildIdentifiedMessage, ShardIdentifiedMessage } from "./tools/events";
 import config from "./tools/config";
 import { createAmqpBroker } from "./tools/amqp";
+import { getShardForGuild } from "./tools/discord";
+import IORedis from "ioredis";
+import { getLogger } from "log4js";
 
-const _logger = createLogger();
+const _logger = getLogger("mojuru");
 
 export class Mojuru {
     readonly broker: Amqp;
     readonly cluster: Cluster;
     readonly rest: REST
+    readonly redis?: IORedis.Redis;
 
     constructor() {
+        /* setup redis */
+        if (config.redis?.host) {
+            this.redis = new IORedis(config.redis.port, config.redis.host, {
+                password: config.redis.password,
+                db: config.redis.database
+            });
+
+            _logger.info("Connected to redis.");
+        }
+
+        /* setup the cluster. */
         this.cluster = new Cluster(this);
-        this.rest = new REST({ version: `${config.discord.gatewayVersion}` });
+        this.rest = new REST({ version: `${config.discord.gateway_version}`, api: config.discord.api_url });
         this.rest.setToken(config.discord.token);
 
         /* setup the broker. */
         this.broker = createAmqpBroker(config.amqp.group, config.amqp.subgroup);
         this.broker.on("command", this.onCommand.bind(this));
+        this.broker.on("stats", this.onStats.bind(this));
     }
 
-    async onCommand(message: ShardIdentifiedMessage, options: AmqpResponseOptions) {
-        const shard = this.cluster.shards.get(message.shard_id);
-        if (!shard) {
-            options.nack(false, false);
-            _logger.warn("received command for unknown shard:", message.shard_id);
+    async onStats(message: {}, options: AmqpResponseOptions) {
+        void message;
+        options.reply({
+            shards: this.cluster.shards.map(shard => ({
+                latency: shard.latency,
+                id: shard.id,
+                state: shard.state,
+            })),
+            latency: this.cluster.latency
+        });
+    }
+
+    async onCommand(message: ShardIdentifiedMessage | GuildIdentifiedMessage, options: AmqpResponseOptions) {
+        const command = JSON.parse(message.payload.toString()) as GatewaySendPayload;
+        if ("guild_id" in message) {
+            const shard = getShardForGuild(BigInt(message.guild_id), this.cluster.totalShards);
+            if (this._sendToShard(shard, command)) {
+                options.ack()
+            } else {
+                options.nack(false, false);
+                _logger.debug("received command for a guild we haven't spawned, guild:", message.guild_id);
+            }
+
             return
         }
 
-        options.ack();
-        const command = JSON.parse(message.payload.toString()) as GatewaySendPayload;
-        await shard.send(command)
+        if (!message.shard_id) {
+            options.ack();
+            await this.cluster.broadcast(command);
+            return;
+        }
+
+        if (!this._sendToShard(message.shard_id, command)) {
+            options.nack(false, false);
+            _logger.warn("received command for unknown shard:", message.shard_id);
+        } else {
+            options.ack();
+        }
     }
 
     publishEvent(shardId: number, payload: GatewayDispatchPayload) {
@@ -66,9 +108,8 @@ export class Mojuru {
             payload: bytes
         });
     }
-}
 
-export interface Command {
-    shardId: number;
-    payload: Buffer;
+    private _sendToShard(id: number, payload: GatewaySendPayload): boolean {
+        return !!this.cluster.shards.get(id)?.send(payload);
+    }
 }

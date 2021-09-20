@@ -18,6 +18,7 @@
 
 import { _heartbeater_acked, _shard_log, _shard_sequence } from "./keys";
 import { GatewayOpcodes } from "discord-api-types/v9";
+import * as metrics from "../tools/metrics";
 
 import type { Shard } from "./shard";
 
@@ -44,15 +45,16 @@ export class Heartbeater {
     start(delay: number) {
         this.reset();
 
-        this.shard[_shard_log]("debug", "heartbeat: now heartbeating every", delay, "milliseconds");
+        this.shard[_shard_log]("debug", "[heartbeat] now heart-beating every", delay, "milliseconds");
 
         this[_delay] = delay;
-        this[_interval] = setInterval(this.heartbeat.bind(this, "interval"), delay);
+        this[_interval] = setInterval(this.heartbeat.bind(this, "interval"), delay).ref();
     }
 
     reset() {
         if (this[_interval]) {
             clearInterval(this[_interval]!);
+            delete this[_interval];
         }
 
         this[_heartbeater_acked] = false;
@@ -60,20 +62,20 @@ export class Heartbeater {
         this[_latency] = -1;
 
         delete this[_delay];
-        delete this[_interval];
     }
 
     ack() {
         this[_heartbeater_acked] = true;
         this[_latency] = Date.now() - this[_last]
-        this.shard[_shard_log]("debug", "heartbeat: last heartbeat was acknowledged, latency:", this[_latency], "ms");
+        metrics.latency.labels({ id: this.shard.id }).observe(this.latency);
+        this.shard[_shard_log]("debug", "[heartbeat] last heartbeat was acknowledged, latency:", this[_latency], "ms");
     }
 
     async heartbeat(reason: string, ignoreNonAcked: boolean = false) {
         if (!this[_heartbeater_acked]) {
-            this.shard[_shard_log]("warn", `heartbeat(${reason}):`, "last heartbeat was not acked,", `ignoring=${ignoreNonAcked}`);
+            this.shard[_shard_log]("warn", `[heartbeat: ${reason}]`, "last heartbeat was not acked,", `ignoring=${ignoreNonAcked}`);
             if (!ignoreNonAcked) {
-                await this.shard.destroy(true, 1012);
+                await this.shard.destroy({ reconnect: true, code: 1_012 });
                 return;
             }
         }
@@ -84,6 +86,6 @@ export class Heartbeater {
         });
 
         this[_last] = Date.now();
-        this.shard[_shard_log]("debug", `heartbeat(${reason}):`, "sent heartbeat");
+        this.shard[_shard_log]("debug", `[heartbeat: ${reason}]`, "sent heartbeat");
     }
 }

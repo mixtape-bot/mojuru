@@ -17,6 +17,11 @@
  */
 
 export interface ShardIdentifiedMessage {
-    shard_id: number;
+    shard_id?: number;
+    payload: Buffer;
+}
+
+export interface GuildIdentifiedMessage {
+    guild_id: string;
     payload: Buffer;
 }

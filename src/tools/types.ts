@@ -16,6 +16,5 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-export function sleep(duration: number, beforeUnlock: () => any = () => {}): Promise<void> {
-    return new Promise(res => setTimeout(async () => { await beforeUnlock(); res() }, duration).ref());
-}
+export type CompressionLibrary = "fast-zlib" | "zlib-sync" | "zlib";
+export type CompressionAlgorithm = "zlib-stream";

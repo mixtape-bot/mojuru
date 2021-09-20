@@ -16,6 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+export const _redis = {
+    shard_seq: (id: number) => `mojuru.shards:${id}.seq`,
+    session_id: (id: number) => `mojuru.shards:${id}.session`
+}
+
 export const _shard_sequence:       unique symbol = Symbol.for("Shard#sequence");
 export const _shard_close_sequence: unique symbol = Symbol.for("Shard#closeSequence");
 export const _shard_log:            unique symbol = Symbol.for("Shard#log()");

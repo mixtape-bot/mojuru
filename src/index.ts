@@ -16,13 +16,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import "./tools/log4js";
 import { Mojuru } from "./Mojuru";
 import config from "./tools/config";
 
 async function main() {
     const mojuru = new Mojuru();
     await mojuru.broker.connect(config.amqp.host);
-    await mojuru.cluster.spawn(config.cluster.spawning);
+    await mojuru.cluster.spawn(config.cluster.sharding);
 }
 
 void main();

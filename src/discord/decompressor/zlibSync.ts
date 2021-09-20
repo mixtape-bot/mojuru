@@ -16,18 +16,32 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import * as zlibSync from "zlib-sync";
+import type * as zlib from "zlib-sync";
 import { CHUNK_SIZE, Decompressor } from "./decompressor";
 
 const _inflate: unique symbol = Symbol.for("ZlibSync#zlib")
 
-export class ZlibSync extends Decompressor {
-    // private static readonly Z_SYNC_FLUSH = 2;
+let zlibSync: typeof zlib;
+try {
+    zlibSync = require("zlib-sync");
+} catch {
+    // no-op
+}
 
-    private [_inflate]: zlibSync.Inflate;
+export class ZlibSync extends Decompressor {
+    readonly type = "zlib-stream"
+
+    private [_inflate]: zlib.Inflate;
 
     init() {
+        if (!zlibSync) {
+            throw new Error("Cannot use the 'zlib-sync' decompressor without the 'zlib-sync' package.");
+        }
+
         this[_inflate] = new zlibSync.Inflate({ chunkSize: CHUNK_SIZE });
+    }
+
+    close() {
     }
 
     protected _addBuffer(buf: Buffer) {

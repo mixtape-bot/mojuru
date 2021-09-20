@@ -18,40 +18,81 @@
 
 import type { GatewayDispatchEvents } from "discord-api-types/v9";
 import type { ShardSettings } from "../discord/shard";
-import type { AutoSpawningOptions, ClusteredSpawningOptions, ManualSpawningOptions } from "../discord/cluster";
 import * as path from "path";
 import * as fs from "fs";
-import * as YAML from "yaml";
+import * as TOML from "toml";
 
 export interface Config {
-    discord: ConfigDiscord;
-    cluster: ConfigCluster;
-    amqp: ConfigAmqp;
+    discord: DiscordConfig;
+    cluster: ClusterConfig;
+    amqp: AmqpConfig;
+    metrics: MetricsConfig
+    redis?: RedisConfig;
 }
 
-export interface ConfigDiscord {
+export interface MetricsConfig {
+    enabled: boolean;
+    port: number;
+    endpoint: string;
+}
+
+export interface DiscordConfig {
     token: string;
-    gatewayVersion: number;
+    gateway_version: number;
+    api_url: string;
 }
 
-export interface ConfigCluster {
+export interface ClusterConfig {
     events: GatewayDispatchEvents[];
-    shard: ConfigClusterShard;
-    spawning: AutoSpawningOptions | ManualSpawningOptions | ClusteredSpawningOptions;
+    shard_options: ConfigClusterShard;
+    sharding: AutoSpawningOptions | ManualSpawningOptions | ClusteredSpawningOptions;
 }
 
-export type ConfigClusterShard = Omit<ShardSettings, "id" | "token" | "version">;
+export interface RedisConfig {
+    host?: string;
+    port?: number;
+    password?: string;
+    database?: number;
+}
 
-export interface ConfigAmqp {
+export interface SpawningOptions {
+    type?: "auto" | "manual" | "clustered";
+}
+
+export interface AutoSpawningOptions extends SpawningOptions {
+    type?: "auto";
+}
+
+export interface ManualSpawningOptions extends SpawningOptions {
+    type: "manual";
+    shard_total: number;
+    shards?: number[] | ShardRange;
+}
+
+export interface ClusteredSpawningOptions extends SpawningOptions {
+    type: "clustered";
+    cluster_id: number;
+    shard_total: number;
+    shards_per_cluster: number;
+}
+
+export interface ShardRange {
+    first_id: number;
+    last_id: number;
+}
+
+export type ConfigClusterShard = Partial<Omit<ShardSettings, "shard" | "token" | "version">>;
+
+export interface AmqpConfig {
     host: string;
     group: string;
     subgroup?: string;
-    commandEvent: string;
+    command_event: string;
 }
 
-const configPath = path.join(process.cwd(), "mojuru.yml");
+const configPath = path.join(process.cwd(), "mojuru.toml");
 
-export default (function load(): Config {
+function load(): Config {
     try {
         fs.accessSync(configPath, fs.constants.R_OK);
     } catch {
@@ -59,5 +100,7 @@ export default (function load(): Config {
     }
 
     const contents = fs.readFileSync(configPath, { encoding: "utf-8" });
-    return YAML.parse(contents);
-})();
+    return TOML.parse(contents);
+}
+
+export default load();

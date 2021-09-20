@@ -16,16 +16,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import * as crypto from "crypto";
+
 export type MaxConcurrency = 1 | 16 | 32 | 64;
 
-export function getShardForGuild(guildId: bigint, shardCount: bigint): number {
-    return Number((guildId >> 22n) % shardCount);
+export function getShardForGuild(guildId: bigint, shardCount: number): number {
+    return Number((guildId >> 22n) % BigInt(shardCount));
 }
 
 export function getRateLimitKey(id: number, maxConcurrency: MaxConcurrency): number {
     return id % maxConcurrency;
 }
 
+/** taken from https://github.com/arcanebot/redis-sharder */
 export function getClusterShards(cluster: number, totalShards: number, shardCount: number) {
     const initial = shardCount * cluster;
     let shards = [initial, initial + (shardCount - 1)];
@@ -46,4 +49,16 @@ export function createShards(amount: number, offset: number = 0): number[] {
 
 export function range(min: number, max: number) {
     return Array.from({ length: max - min + 1 }, (_, i) => min + i);
+}
+
+export function createSessionId(): string {
+    return crypto
+        .createHash("sha1")
+        .update(crypto.randomBytes(128))
+        .digest("hex");
+}
+
+export function extractIdFromToken(token: string): string {
+    const [ id_part ] = token.split(".");
+    return Buffer.from(id_part, "base64").toString("utf-8");
 }

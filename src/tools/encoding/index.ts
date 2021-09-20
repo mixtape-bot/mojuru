@@ -16,6 +16,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-export function sleep(duration: number, beforeUnlock: () => any = () => {}): Promise<void> {
-    return new Promise(res => setTimeout(async () => { await beforeUnlock(); res() }, duration).ref());
+import { Erlpack } from "./erlpack";
+import { Json } from "./json";
+
+export const encoders = {
+    etf: Erlpack,
+    json: Json
 }
+
+export * from "./erlpack";
+export * from "./json";
+export * from "./encoder";
+
+export type Encoding = "etf" | "json";
