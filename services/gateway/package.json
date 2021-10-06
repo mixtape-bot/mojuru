@@ -1,0 +1,42 @@
+{
+    "name": "@mixtape/mojuru",
+    "version": "1.0.0",
+    "description": "Discord Gateway",
+    "main": "dist/index.js",
+    "bin": "dist/index.js",
+    "author": "mixtape bot",
+    "license": "GPL-3.0",
+    "private": true,
+    "scripts": {
+        "dev": "ts-node src/index.ts",
+        "build": "yarn clean && tsc",
+        "clean": "rm -rf dist",
+        "executable": "pkg --options expose-gc -t node16-linux ."
+    },
+    "dependencies": {
+        "@msgpack/msgpack": "^2.7.1",
+        "amqplib": "^0.8.0",
+        "cockatiel": "^2.0.2",
+        "ioredis": "^4.27.9",
+        "log4js": "^6.3.0",
+        "prom-client": "^13.2.0",
+        "redlock": "^4.2.0",
+        "reflect-metadata": "^0.1.13",
+        "tiny-typed-emitter": "^2.1.0",
+        "toml": "^3.0.0",
+        "ws": "^8.2.3"
+    },
+    "devDependencies": {
+        "@types/amqplib": "^0.8.2",
+        "@types/ioredis": "^4.27.6",
+        "@types/redlock": "^4.0.2",
+        "@types/ws": "^8.2.0",
+        "@yukikaze-bot/erlpack": "^1.0.1",
+        "bufferutil": "^4.0.3",
+        "discord-api-types": "^0.23.1",
+        "fast-zlib": "^2.0.1",
+        "simdjson": "^0.9.2",
+        "utf-8-validate": "^5.0.5",
+        "zlib-sync": "^0.1.7"
+    }
+}

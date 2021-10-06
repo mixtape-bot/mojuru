@@ -1,0 +1,63 @@
+[discord]
+token = ""
+gateway_version = 9
+api_url = "https://discord.com/api"
+
+[cluster]
+# "all" means all events will be passed to RMQ, or you can pass a list: [ "MESSAGE_CREATE", ... ]
+events = "all"
+# the cluster id
+id = 1
+
+    [cluster.shard_options]
+    # -1 means all intents, or you can provide a list of intents: [ "Guilds", ... ]
+    intents = -1
+    # the decompressor to use, available options: zlib-sync (package), fast-zlib (package), and zlib (node builtin)
+    decompressor = "fast-zlib"
+    # the payload encoding to use, etf requires (@yukikaze-bot/erlpack), json is a node builtin (install simdjson for faster json parsing)
+    encoding = "etf"
+    # the discord gateway url to use
+    url = "wss://gateway.discord.gg"
+    # the total number of reconnects a shard can make back-to-back until it fails, -1 means unlimited.
+    max_reconnects = -1
+
+    [cluster.sharding]
+    #  # the sharding strategy to use:
+    # auto    - uses the recommended number of shards by discord
+    # manual  - manually spawn shards using an array of their ids, a total shard count, or a range (first and last).
+    # cluster - create shards based off this cluster's id
+    type = "auto"
+
+    ## manual
+    # the total number of shards to spawn.
+    shard_total = 2
+    # or a list of shard ids to spawn.
+    shards = [ 5, 6, 7, 8, 9 ]
+        # or to start shards [5, 6, 7, 8, 9] using a range
+        [cluster.sharding.shards]
+        first_id = 5
+        last_id = 9
+
+    ## clustered
+    # the total number of shards your bot is using.
+    shard_total = 2
+    # the total number of shards that each cluster will spawn.
+    shards_per_cluster = 2
+
+[amqp]
+host = "localhost"
+group = "mojuru"
+commands_queue = "commands"
+events_queue = "events"
+
+[redis]
+host = "localhost"
+port = 6379
+database = 0
+password = ""
+shard_prefix = "mojuru.shards:"
+
+[metrics]
+enabled = true
+port = 4420
+endpoint = "/metrics"
